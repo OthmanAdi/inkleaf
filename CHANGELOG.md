@@ -4,6 +4,11 @@
 
 ### Reader
 
+- Added frame-addressable camera arrival and bidirectional page riffles for Contents jumps.
+- Added a live lens with edge refraction, color dispersion and custom magnification, plus printed term inspection.
+- Added apparatus orbit and guided demonstration modes.
+- Added seeded paper grain, ink edges and adjustable figure lights.
+- Added the study desk with quiz, glossary, sources, teacher notes, higher contrast and optional page sounds.
 - Added seven Three.js experiments alongside The swing, with reversible page turns, Contents, and saved lesson settings and predictions.
 - Added paper swipes and Shift+wheel navigation, a frame track for the active experiment, and magnified term details.
 - Added direct bob dragging and a keyboard-operable starting-angle control.

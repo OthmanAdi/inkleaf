@@ -42,9 +42,9 @@ Verify each clip at its first, middle and last frame, then revisit the middle fr
 
 ## Add magnified detail when useful
 
-The **Magnifier** button in this reader shows a 2× crop of the current rendered figure. Pointer movement or a tap selects the point; when the button has focus, the arrow keys move the lens and Escape closes it. The optional lens can show a larger crop of a user's figure. Choose a normalized point, update the crop after the renderer draws, and verify the canvas is still available when the crop is read. Do not rely on magnification alone to convey a value or definition.
+The **Magnifier** button shows a live crop with edge refraction and color separation. It starts at 2×. Pointer movement or a tap selects the point. When the button has focus, the arrow keys move the lens and Escape closes it. Choose a normalized point and update the crop after the renderer draws. See [motion and surface recipes](motion-and-surface.md) for the optical samplers and controls.
 
-When a lesson term is relevant to the chosen point, expose its label and definition through the lesson term data and a readable detail panel. The detail can accompany the lens or appear on its own. Make the affordance keyboard-operable, keep focus visible and provide a direct way to close it. Omit term detail when the point has no useful term.
+Expose the lesson term's label and definition in readable text. In this reader a pointer or focus on the printed term can open its figure lens and term card. Make the affordance keyboard-operable, keep focus visible and provide a direct way to close it. Omit term detail when the point has no useful term.
 
 ## Keep the reader flow coherent
 

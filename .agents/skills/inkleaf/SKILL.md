@@ -1,6 +1,6 @@
 ---
 name: inkleaf
-description: Build or adapt an interactive pop-up book with original lessons, custom scenes, deterministic motion, and optional magnified term details.
+description: Build or adapt a Three.js pop-up book with interactive lessons, original scenes, editable lights and textures, and seekable camera, page riffle, diagram and magnifier animations.
 ---
 
 # Inkleaf
@@ -11,7 +11,7 @@ Use this skill when a reader should inspect, predict, or change something in an 
 
 Use the checkout containing this skill, or the source checkout the user names. Read its project instructions and package scripts. Trace each requested feature from the lesson contract and scene modules to the active app entry point before documenting it.
 
-The checked-in reader has eight experiments: a pendulum lesson plus seven lessons described by `InteractiveLesson`. Contents navigation selects a chapter, and each extra experiment has its own settings, sample function, readings and figure. The swing lesson raises a paper apparatus, releases a pendulum, shows energy readings, supports an air-drag comparison and reset, and lazily loads a Three.js figure with an HTML/CSS fallback. A frame panel seeks the current experiment and the page, pop-up and magnifier animations. The magnifier has a term card when the selected lesson provides a term. Keyboard, touch and reduced-motion behavior are part of this demo; use the actual reader to check their details.
+The checked-in reader has eight experiments. Each chapter supplies settings, a sample function, readings and a figure. The opening camera uses CSS perspective on the paper notebook. The apparatus cameras render in Three.js. The frame panel seeks the opening, page turn, riffle, pop-up, live optical sweep, camera orbit, guided demonstration and active experiment. The live 2D lens samples WebGL pixels with an inverse refraction map and color dispersion. The study desk supplies quiz, glossary, teaching notes, contrast and optional sound.
 
 ## Choose a chapter or make a scene
 
@@ -37,6 +37,8 @@ Use a clip's frame rate and last frame as its source of duration. Define authore
 For a self-contained animation, compute the pose directly from the requested frame. For an experiment that depends on prior input, reset to a known initial state and replay recorded settings in fixed steps to the requested time. Seek must stop live playback first, set prerequisite page or scene state, and update every visible output owned by that clip. Test frame zero, a middle frame, the last frame, and the same middle frame after visiting the end.
 
 The mounted demo exposes `window.inkleafDemo.seek('turn' | 'popup' | 'swing', seconds)` for the swing clips and `window.inkleafDemo.seekExperiment(seconds)`, `experimentClip()`, `experimentTerm()` and `movePage(-1 | 1)` for the selected extra experiment and page navigation. The visible motion panel uses those demo hooks to seek the current experiment, and changes its experiment clip as the reader changes chapters. These globals and IDs belong to this app; a different book should define a small bridge around its own state instead of depending on `window.inkleafDemo`.
+
+Use `seekBookMotion('camera' | 'riffle', seconds)` for the paper book. The riffle replays the last eligible jump or its documented default. Keep the destination, starting lesson, leaf count and direction fixed while comparing two seeks. Use the [motion and surface recipes](references/motion-and-surface.md) to adapt the visual system.
 
 ## Check the finished chapter
 
