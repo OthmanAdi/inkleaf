@@ -1,3 +1,5 @@
+import { createRefractionMap, DEFAULT_LENS_OPTICS, resolveOptics, type LensOptics } from './refraction';
+
 export function mountMagnifier(
   canvas: HTMLCanvasElement,
   button: HTMLButtonElement,
@@ -16,7 +18,6 @@ export function mountMagnifier(
   const help = document.createElement('p');
   help.className = 'inkleaf-loupe-help';
   help.hidden = true;
-  help.textContent = '2× detail. Move or tap the diagram to inspect a point. With the magnifier button focused, use the arrow keys to move it and Escape to close it.';
   help.id = canvas.id + '-loupe-help';
   const card = document.createElement('aside');
   card.className = 'inkleaf-loupe-term';
@@ -28,12 +29,25 @@ export function mountMagnifier(
   plate.append(detail);
   plate.after(help, card);
 
-  const zoom = 2;
+  const sample = document.createElement('canvas');
+  sample.width = sample.height = detail.width;
+  const sampleContext = sample.getContext('2d', { willReadFrequently: true });
+  if (!sampleContext) return;
+  const output = context.createImageData(detail.width, detail.height);
+  let optics: LensOptics = { ...DEFAULT_LENS_OPTICS };
+  let warp = createRefractionMap(detail.width, optics);
   let active = false;
   let pendingDetail = false;
   let x = 0.5;
   let y = 0.5;
   const minOffset = (value: number) => Math.min(0.95, Math.max(0.05, value));
+  function describeOptics(): void {
+    detail.dataset.zoom = String(optics.zoom);
+    detail.dataset.refraction = String(optics.refraction);
+    detail.dataset.dispersion = String(optics.dispersion);
+    help.textContent = `${Number(optics.zoom.toFixed(2))}× detail. Move or tap the diagram. With Magnifier focused, use the arrow keys to move it and Escape to close it.`;
+  }
+  describeOptics();
 
   function setActive(value: boolean): void {
     if (active === value) return;
@@ -109,16 +123,27 @@ export function mountMagnifier(
     const screen = canvas.getBoundingClientRect();
     if (screen.width === 0 || screen.height === 0) return;
     // Crop in CSS pixels first so the zoom stays the same across device pixel ratios.
-    const cropCss = detail.getBoundingClientRect().width / zoom;
+    const cropCss = detail.getBoundingClientRect().width / optics.zoom;
     const width = Math.min(canvas.width, cropCss * canvas.width / screen.width);
     const height = Math.min(canvas.height, cropCss * canvas.height / screen.height);
     const left = Math.min(canvas.width - width, Math.max(0, x * canvas.width - width / 2));
     const top = Math.min(canvas.height - height, Math.max(0, y * canvas.height - height / 2));
-    context.drawImage(canvas, left, top, width, height, 0, 0, detail.width, detail.height);
+    sampleContext.drawImage(canvas, left, top, width, height, 0, 0, detail.width, detail.height);
+    const source = sampleContext.getImageData(0, 0, detail.width, detail.height);
+    warp(source.data, output.data);
+    context.putImageData(output, 0, 0);
   });
 
   return {
-    inspect(center: { x: number; y: number }): void {
+    inspect(center: { x: number; y: number }, options?: Partial<LensOptics>): void {
+      if (options) {
+        const next = resolveOptics({ ...optics, ...options });
+        if (next.refraction !== optics.refraction || next.dispersion !== optics.dispersion) {
+          warp = createRefractionMap(detail.width, next);
+        }
+        optics = next;
+        describeOptics();
+      }
       x = minOffset(center.x);
       y = minOffset(center.y);
       pendingDetail = canvas.hasAttribute('hidden');

@@ -13,7 +13,8 @@
     <span>Physics field notebook</span>
   </header>
   <main>
-    <div class="notebook" id="notebook">
+    <div class="book-view" id="book-camera">
+      <div class="notebook" id="notebook">
       <section class="paper page-left" aria-label="Field notes">
         <div class="cover-copy" id="cover-copy">
           <p class="folio">Field notebook · Energy</p>
@@ -96,8 +97,21 @@
         </div>
         <div class="leaf-back"></div>
       </div>
+      <div id="book-riffle" class="riffle" aria-hidden="true" hidden></div>
       <button type="button" class="primary open-book" id="open-book">Open notebook <span aria-hidden="true">↗</span></button>
+      </div>
     </div>
+    <template id="riffle-template">
+      <div class="riffle-leaf" hidden>
+        <div class="riffle-panel riffle-root">
+          <div class="riffle-panel riffle-fold">
+            <span class="riffle-print riffle-print-front"></span>
+            <span class="riffle-print riffle-print-back"></span>
+            <div class="riffle-panel riffle-edge"></div>
+          </div>
+        </div>
+      </div>
+    </template>
     <nav class="book-nav" aria-label="Notebook pages">
       <button type="button" id="previous" hidden>← Back to cover</button>
       <button type="button" id="contents" aria-expanded="false">Contents</button>

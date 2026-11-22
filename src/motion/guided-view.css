@@ -1,0 +1,9 @@
+.guided-view { max-width: 58rem; margin: 1rem auto; border-top: 1px solid #a58a64; padding: .8rem 0; color: #fff4dd; }
+.guided-view summary { cursor: pointer; min-height: 2rem; }
+.guided-view-controls { display: grid; gap: .8rem; padding: .6rem 0; }
+.guided-view-controls p { margin: 0; }
+.guided-view-controls label { display: grid; grid-template-columns: 3rem minmax(0, 1fr); align-items: center; gap: .8rem; }
+.guided-view-controls input { width: 100%; min-height: 44px; accent-color: #76543c; }
+.guided-view-actions { display: flex; flex-wrap: wrap; gap: .6rem; }
+.guided-view-actions button { min-height: 44px; padding: .5rem .8rem; }
+.guided-view-controls output { font-size: .9rem; }

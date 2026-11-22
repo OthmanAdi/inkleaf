@@ -4,6 +4,8 @@ import {
 } from 'three';
 import { createEngine, supportsWebGL2 } from '../engine/core/app';
 import type { Registry } from '../engine/core/registry';
+import { mountFigureView } from '../motion/guided-view';
+import { createPlateFinish } from './plate-finish';
 
 export function mountPendulumFigure(canvas: HTMLCanvasElement, registry: Registry) {
   if (!supportsWebGL2()) return undefined;
@@ -15,6 +17,8 @@ export function mountPendulumFigure(canvas: HTMLCanvasElement, registry: Registr
     size: () => plate.getBoundingClientRect(),
   });
   const { scene, camera } = engine.ctx;
+  const finish = createPlateFinish(registry, 'demo.swing.figure', () => canvas.dispatchEvent(new Event('inkleaf:request-frame')));
+  finish.light(engine.stage.key);
   registry.set('stage.scene', 'background', '#e9dcc2');
   for (const id of ['stage.desk', 'stage.pad']) {
     const object = registry.get(id)?.object;
@@ -24,6 +28,7 @@ export function mountPendulumFigure(canvas: HTMLCanvasElement, registry: Registr
   const copper = new MeshStandardMaterial({ color: '#a86341', roughness: 0.52, metalness: 0.48 });
   const cutEdge = new MeshStandardMaterial({ color: '#624136', roughness: 0.8 });
   const cream = new MeshStandardMaterial({ color: '#ead4a8', roughness: 0.87 });
+  finish.paper(cream);
   const floor = new Mesh(new BoxGeometry(440, 7, 260), cream);
   floor.position.set(0, -5, 0);
   floor.receiveShadow = true;
@@ -46,6 +51,7 @@ export function mountPendulumFigure(canvas: HTMLCanvasElement, registry: Registr
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     group.add(mesh);
+    finish.outline(mesh);
     return mesh;
   };
   for (const x of [-93, 93]) {
@@ -62,6 +68,7 @@ export function mountPendulumFigure(canvas: HTMLCanvasElement, registry: Registr
   stand.add(pivot);
   const pin = new Mesh(new CylinderGeometry(7, 7, 12, 16), cutEdge);
   pin.rotation.x = Math.PI / 2;
+  finish.outline(pin);
   pivot.add(pin);
 
   const arm = new Group();
@@ -88,11 +95,14 @@ export function mountPendulumFigure(canvas: HTMLCanvasElement, registry: Registr
     registry.add({ id, label, kind: 'object', tags: ['ink', 'object'], parent, object, source: 'src/demo/figure.ts' });
   }
 
+  const view = mountFigureView(canvas, camera, () => {
+    engine.post.render(0);
+    canvas.dispatchEvent(new Event('inkleaf:frame'));
+  }, new Vector3(0, 54, 0));
   const aimCamera = () => {
     const aspect = Math.max(0.5, camera.aspect);
     const widthFit = Math.max(1, 1.33 / aspect);
-    camera.position.set(201 * widthFit, 214 * widthFit, 385 * widthFit);
-    camera.lookAt(0, 54, 0);
+    view.updateBase(new Vector3(201 * widthFit, 214 * widthFit, 385 * widthFit));
   };
   aimCamera();
   engine.ctx.events.on('resize', aimCamera);

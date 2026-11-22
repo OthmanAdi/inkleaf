@@ -24,6 +24,7 @@ export function mountExtraExperiment(registry: Registry, reducedMotion: MediaQue
   let frame = 0;
   let seconds = 0;
   let figure: Figure;
+  let pointer: { id: number; x: number; y: number; setting?: number } | undefined;
   let readingSlots: { label: HTMLElement; value: HTMLElement }[] = [];
 
   function save() {
@@ -86,6 +87,7 @@ export function mountExtraExperiment(registry: Registry, reducedMotion: MediaQue
   function select(lesson?: InteractiveLesson) {
     if (active === lesson) return;
     pause();
+    pointer = undefined;
     renderEpoch++;
     figure?.dispose();
     figure = undefined;
@@ -154,6 +156,24 @@ export function mountExtraExperiment(registry: Registry, reducedMotion: MediaQue
     current.setting = Number(setting.value);
     save();
     seek(0);
+  });
+
+  canvas.addEventListener('pointerdown', (event) => {
+    if (!event.isPrimary || event.button !== 0) return;
+    const hit = figure?.pickAction(event.clientX, event.clientY);
+    pointer = hit ? { id: event.pointerId, x: event.clientX, y: event.clientY, setting: hit.setting } : undefined;
+  });
+  canvas.addEventListener('pointercancel', () => { pointer = undefined; });
+  canvas.addEventListener('pointerup', (event) => {
+    const target = pointer;
+    pointer = undefined;
+    if (!target || target.id !== event.pointerId || Math.hypot(event.clientX - target.x, event.clientY - target.y) > 10) return;
+    if (canvas.dataset.loupeActive === 'true' || !current) return;
+    if (target.setting !== undefined) {
+      setting.value = String(target.setting);
+      setting.dispatchEvent(new Event('change'));
+    }
+    run.click();
   });
 
   return {

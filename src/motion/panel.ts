@@ -51,7 +51,6 @@ export function mountMotionPanel<Id extends string>(
   slider.addEventListener('input', () => apply(slider.valueAsNumber, true));
   previous.addEventListener('click', () => apply(slider.valueAsNumber - 1, true));
   next.addEventListener('click', () => apply(slider.valueAsNumber + 1, true));
-  panel.addEventListener('toggle', () => { if (panel.open) apply(0, true); });
   apply(0, false);
   host.append(panel);
 

@@ -42,3 +42,11 @@ export function magnifierAt(frame: number): { x: number; y: number } {
     ], frame),
   };
 }
+
+export function magnifierZoomAt(frame: number): number {
+  return sampleTrack([
+    { frame: 0, value: 1.7, easeToNext: 'inOutSine' },
+    { frame: 24, value: 2.25, easeToNext: 'inOutSine' },
+    { frame: MAGNIFIER_SWEEP.lastFrame, value: 2 },
+  ], frame);
+}

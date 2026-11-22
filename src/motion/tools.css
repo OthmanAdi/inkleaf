@@ -44,3 +44,12 @@
   background: #f1e2c7;
 }
 .inkleaf-loupe-term p { margin: 2px 0 0; }
+#term-label { width: fit-content; cursor: zoom-in; }
+.inkleaf-high-contrast {
+  --ink: #15130f;
+  --paper: #fffdf5;
+  --copper: #67351d;
+  --line: #554837;
+}
+.inkleaf-high-contrast .paper { background: var(--paper); color: var(--ink); }
+.inkleaf-high-contrast .book-nav button { color: #fff; border-color: #fff9; }

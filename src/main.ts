@@ -9,6 +9,7 @@ import type { InteractiveLesson } from './demo/lesson-contract';
 import { interactiveLessons } from './demo/lessons';
 import { mountExtraExperiment } from './demo/library';
 import { DEMO_MOTIONS, pageTurnAt, popupAt } from './demo/motion';
+import { BOOK_MOTIONS, cameraAt, riffleChangeAt, riffleDuration, riffleLeafAt, type BookMotionId } from './demo/book-motion';
 import type { mountPendulumFigure } from './demo/figure';
 import type { MotionClip } from './motion/frames';
 
@@ -18,6 +19,7 @@ declare global {
   interface Window {
     inkleafDemo: {
       seek(id: Clip, seconds: number): void;
+      seekBookMotion(id: BookMotionId, seconds: number): void;
       seekExperiment(seconds: number): void;
       experimentClip(): MotionClip | null;
       experimentTerm(): InteractiveLesson['term'] | null;
@@ -28,6 +30,8 @@ declare global {
 
 const get = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const notebook = get('notebook');
+const bookCamera = get('book-camera');
+const riffle = get('book-riffle');
 const cover = get('cover-copy');
 const experiment = get('experiment');
 const notes = get('lesson-copy');
@@ -52,7 +56,14 @@ const still = matchMedia('(prefers-reduced-motion: reduce)');
 const registry = new Registry();
 const extra = mountExtraExperiment(registry, still);
 const lessons = [...interactiveLessons.slice(0, 1), lesson, ...interactiveLessons.slice(1)];
+const riffleTemplate = get<HTMLTemplateElement>('riffle-template');
+const riffleLeaves = lessons.slice(1).map(() => {
+  const paper = riffleTemplate.content.firstElementChild!.cloneNode(true) as HTMLElement;
+  riffle.append(paper);
+  return { paper, titles: paper.querySelectorAll('.riffle-print') };
+});
 const motionTime = (id: Clip) => DEMO_MOTIONS[id].lastFrame / DEMO_MOTIONS[id].fps;
+const arrivalDuration = BOOK_MOTIONS.camera.lastFrame / BOOK_MOTIONS.camera.fps;
 const storageKey = 'inkleaf.demo.' + lesson.id;
 const pendulum = new Pendulum({
   params: {
@@ -73,6 +84,13 @@ let selected = lessons.indexOf(lesson);
 let visiblePage = '';
 let predictionOptions: HTMLInputElement[] = [];
 let spreadTurn: { page: number | 'contents'; direction: -1 | 1; focus: boolean; landed: boolean } | undefined;
+type RiffleJourney = { origin: number; page: number; direction: -1 | 1; count: number };
+const defaultRiffle: RiffleJourney = { origin: 0, page: lessons.length - 1, direction: 1, count: lessons.length - 1 };
+let riffleRun: { journey: RiffleJourney; start: number; focus: boolean } | undefined;
+let recentRiffle: RiffleJourney | undefined;
+let riffleLabels: RiffleJourney | undefined;
+let arrival: { start: number; open: boolean } | undefined;
+let inspectingBook: BookMotionId | undefined;
 let popup = 0;
 let popupStarted = false;
 let focusRelease = false;
@@ -113,6 +131,8 @@ const energies = (['gravitational', 'kinetic', 'thermal'] as const).map(key => (
 for (const [id, label, kind, tags, source] of [
   ['demo', lesson.bookTitle, 'book', ['book'], 'src/demo/lesson.ts'],
   ['demo.turn', 'Turn the notebook leaf', 'animation', ['book', 'animation'], 'src/demo/motion.ts'],
+  ['demo.camera', BOOK_MOTIONS.camera.label, 'animation', ['book', 'animation'], 'src/demo/book-motion.ts'],
+  ['demo.riffle', BOOK_MOTIONS.riffle.label, 'animation', ['book', 'animation'], 'src/demo/book-motion.ts'],
   ['demo.popup', 'Raise the paper apparatus', 'animation', ['ink', 'animation'], 'src/demo/motion.ts'],
   ['demo.swing', 'Pendulum energy model', 'simulation', ['physics', 'energy'], 'src/demo/lesson.ts'],
 ] as const) {
@@ -223,9 +243,9 @@ function setBook(open: boolean) {
     document.dispatchEvent(new Event('inkleaf:lessonchange'));
   }
   if (open) {
-    leaf.style.setProperty('--mobile-leaf-height', experiment.parentElement!.getBoundingClientRect().height + 'px');
+    notebook.style.setProperty('--mobile-leaf-height', experiment.parentElement!.offsetHeight + 'px');
   } else {
-    leaf.style.removeProperty('--mobile-leaf-height');
+    notebook.style.removeProperty('--mobile-leaf-height');
   }
 }
 
@@ -239,6 +259,69 @@ function openSpread(page: number | 'contents', focus: boolean) {
   setBook(true);
   if (focus) focusPage();
   save();
+}
+
+function motionBusy() {
+  return turnClock.active || !!arrival || !!riffleRun;
+}
+
+function paintCamera(seconds: number) {
+  const pose = cameraAt(seconds);
+  bookCamera.dataset.pose = pose.progress === 0 ? 'cover' : pose.progress === 1 ? 'reading' : 'approach';
+  bookCamera.style.setProperty('--camera-x', pose.x + 'px');
+  bookCamera.style.setProperty('--camera-y', pose.y + 'px');
+  bookCamera.style.setProperty('--camera-depth', pose.depth + 'px');
+  bookCamera.style.setProperty('--camera-pitch', pose.pitch + 'deg');
+  bookCamera.style.setProperty('--camera-yaw', pose.yaw + 'deg');
+  bookCamera.style.setProperty('--camera-roll', pose.roll + 'deg');
+  return pose;
+}
+
+function paintArrival(seconds: number) {
+  const pose = paintCamera(seconds);
+  if (opened !== pose.reading) setBook(pose.reading);
+  turn[0] = pose.opening;
+  paintTurn();
+}
+
+function paintRiffle(journey: RiffleJourney, seconds: number) {
+  const landed = seconds >= riffleChangeAt(journey.count);
+  const destination = landed ? journey.page : journey.origin;
+  const changedPage = !opened || contentsOpen === landed || selected !== destination;
+  contentsOpen = !landed;
+  selected = destination;
+  const visible = seconds > 0 && seconds < riffleDuration(journey.count);
+  riffle.hidden = !visible;
+  if (changedPage) setBook(true);
+  if (riffleLabels !== journey) {
+    riffleLabels = journey;
+    riffle.dataset.direction = journey.direction === 1 ? 'forward' : 'backward';
+    riffle.dataset.leaves = String(journey.count);
+    riffleLeaves.forEach(({ titles }, index) => {
+      const front = lessons[journey.origin + index * journey.direction];
+      const back = lessons[journey.origin + (index + 1) * journey.direction];
+      titles[0]!.textContent = (journey.direction === 1 ? front : back)?.title ?? '';
+      titles[1]!.textContent = (journey.direction === 1 ? back : front)?.title ?? '';
+    });
+  }
+  if (!visible) return;
+  riffleLeaves.forEach(({ paper }, index) => {
+    const pose = riffleLeafAt(seconds, index, journey.direction);
+    paper.hidden = index >= journey.count || !pose.visible;
+    if (paper.hidden) return;
+    paper.style.setProperty('--angle-leaf', pose.angle + 'deg');
+    paper.style.setProperty('--fold-leaf', pose.fold + 'deg');
+    paper.style.setProperty('--lift-leaf', pose.lift + 'px');
+  });
+}
+
+function settleBookPreview() {
+  if (!inspectingBook) return;
+  inspectingBook = undefined;
+  riffle.hidden = true;
+  paintCamera(opened ? arrivalDuration : 0);
+  turn[0] = Number(opened);
+  paintTurn();
 }
 
 function turnToSpread(page: number | 'contents', direction: -1 | 1, focus: boolean) {
@@ -256,9 +339,18 @@ function turnToSpread(page: number | 'contents', direction: -1 | 1, focus: boole
 }
 
 function selectLesson(index: number, focus = true) {
-  if (!lessons[index] || turnClock.active) return;
+  if (!lessons[index] || motionBusy()) return;
+  settleBookPreview();
   if (opened) {
-    if (contentsOpen || index !== selected) turnToSpread(index, contentsOpen || index > selected ? 1 : -1, focus);
+    const count = Math.abs(index - selected);
+    const direction = index >= selected ? 1 : -1;
+    if (contentsOpen && count > 1 && !still.matches) {
+      const journey: RiffleJourney = { origin: selected, page: index, direction, count };
+      recentRiffle = journey;
+      riffleRun = { journey, start: performance.now(), focus };
+      paintRiffle(journey, 0);
+      requestFrame();
+    } else if (contentsOpen || count > 0) turnToSpread(index, direction, focus);
   } else {
     selected = index;
     contentsOpen = false;
@@ -267,7 +359,8 @@ function selectLesson(index: number, focus = true) {
 }
 
 function toggleContents() {
-  if (turnClock.active) return;
+  if (motionBusy()) return;
+  settleBookPreview();
   if (opened) {
     if (contentsOpen) turnToSpread(selected, 1, true);
     else turnToSpread('contents', -1, true);
@@ -278,6 +371,8 @@ function toggleContents() {
 }
 
 function movePage(direction: -1 | 1) {
+  if (motionBusy()) return;
+  settleBookPreview();
   if (!opened) {
     if (direction === 1) goTo(true);
   } else if (contentsOpen) {
@@ -308,29 +403,32 @@ function paintTurn() {
   leaf.classList.toggle('spread-turn', !!spreadTurn);
   leaf.style.setProperty('--turn-angle', pageTurnAt(progress).angleDeg + 'deg');
   leaf.hidden = !spreadTurn && progress >= 1;
-  next.hidden = opened || progress > 0 || turnClock.active;
-  prev.hidden = !opened || (turnClock.active && !spreadTurn);
+  next.hidden = opened || progress > 0 || !!arrival;
+  prev.hidden = !opened || !!arrival;
 }
 
 function goTo(open: boolean) {
-  if (turnClock.active || open === opened) return;
+  if (motionBusy()) return;
+  settleBookPreview();
+  if (open === opened) return;
   if (!open) {
     swinging = false;
     focusRelease = false;
-    contentsOpen = false;
   }
-  setBook(open);
-  if (!open) get('book-title').focus({ preventScroll: true });
   if (still.matches) {
+    if (!open) contentsOpen = false;
+    setBook(open);
+    paintCamera(open ? arrivalDuration : 0);
     turn[0] = Number(open);
     if (open) focusPage();
+    else get('book-title').focus({ preventScroll: true });
+    paintTurn();
+    save();
   } else {
-    void turnClock.start([{ leaf: 0, to: Number(open), dur: motionTime('turn'), delay: 0, ease: 'linear' }], turn)
-      .then(() => { if (open && opened && turn[0] === 1) focusPage(); });
+    arrival = { start: performance.now(), open };
+    paintTurn();
     requestFrame();
   }
-  paintTurn();
-  save();
 }
 
 function showResult(message: string) {
@@ -396,6 +494,33 @@ function frame(now: number) {
   lastFrame = now;
   framePending = false;
   if (turnClock.update(still.matches ? motionTime('turn') : delta, turn)) paintTurn();
+  if (arrival) {
+    const { start, open } = arrival;
+    const elapsed = still.matches ? arrivalDuration : Math.max(0, (now - start) / 1000);
+    const done = elapsed >= arrivalDuration;
+    if (done) {
+      arrival = undefined;
+      if (!open) contentsOpen = false;
+    }
+    paintArrival(open ? elapsed : arrivalDuration - elapsed);
+    if (done) {
+      if (open) focusPage();
+      else get('book-title').focus({ preventScroll: true });
+      save();
+    }
+  }
+  if (riffleRun) {
+    const { journey, start, focus } = riffleRun;
+    const duration = riffleDuration(journey.count);
+    const elapsed = still.matches ? duration : (now - start) / 1000;
+    paintRiffle(journey, elapsed);
+    if (elapsed >= duration) {
+      riffleRun = undefined;
+      if (focus) focusPage();
+      save();
+    }
+  }
+  const apparatusMoving = popupStarted || swinging;
   if (popupStarted) {
     popup = still.matches ? 1 : Math.min(1, popup + delta / motionTime('popup'));
     if (popup >= 1) {
@@ -413,12 +538,12 @@ function frame(now: number) {
     }
     showObservation();
   }
-  paintApparatus();
+  if (apparatusMoving) paintApparatus();
   if (focusRelease && popup >= 1) {
     focusRelease = false;
     release.focus({ preventScroll: true });
   }
-  if (turnClock.active || popupStarted || swinging) requestFrame();
+  if (motionBusy() || popupStarted || swinging) requestFrame();
   else lastFrame = 0;
 }
 
@@ -431,14 +556,44 @@ function sampleSwing(seconds: number) {
   pendulum.step(seconds - wholeSteps / 60);
 }
 
-function seek(id: Clip, seconds: number) {
-  if (!Number.isFinite(seconds)) return;
-  const progress = Math.max(0, Math.min(1, seconds / motionTime(id)));
+function pauseDemoMotion() {
   spreadTurn = undefined;
+  arrival = undefined;
+  riffleRun = undefined;
+  riffle.hidden = true;
   turnClock.finish();
   popupStarted = false;
   focusRelease = false;
   swinging = false;
+}
+
+function seekBookMotion(id: BookMotionId, seconds: number) {
+  if (!Number.isFinite(seconds)) return;
+  pauseDemoMotion();
+  inspectingBook = id;
+  popup = 0;
+  sampleSwing(0);
+  showResult('');
+  if (id === 'camera') {
+    contentsOpen = false;
+    selected = lessons.indexOf(lesson);
+    setBook(cameraAt(seconds).reading);
+    paintArrival(seconds);
+  } else {
+    const journey = recentRiffle ?? defaultRiffle;
+    paintCamera(arrivalDuration);
+    turn[0] = 1;
+    paintRiffle(journey, seconds);
+    paintTurn();
+  }
+  paintApparatus();
+}
+
+function seek(id: Clip, seconds: number) {
+  if (!Number.isFinite(seconds)) return;
+  pauseDemoMotion();
+  inspectingBook = undefined;
+  const progress = Math.max(0, Math.min(1, seconds / motionTime(id)));
   selected = lessons.indexOf(lesson);
   contentsOpen = false;
   if (id === 'turn') {
@@ -462,10 +617,11 @@ function seek(id: Clip, seconds: number) {
     }
     if (popup > 0) prepareFigure();
   }
+  paintCamera(opened ? arrivalDuration : 0);
   paintTurn();
   paintApparatus();
 }
-window.inkleafDemo = { seek, seekExperiment: extra.seek, experimentClip: extra.clip, experimentTerm: extra.term, movePage };
+window.inkleafDemo = { seek, seekBookMotion, seekExperiment: extra.seek, experimentClip: extra.clip, experimentTerm: extra.term, movePage };
 
 next.addEventListener('click', () => goTo(true));
 prev.addEventListener('click', () => goTo(false));
@@ -583,6 +739,7 @@ try {
   setBook(false);
 }
 turn[0] = Number(opened);
+paintCamera(opened ? arrivalDuration : 0);
 paintTurn();
 paintApparatus();
 

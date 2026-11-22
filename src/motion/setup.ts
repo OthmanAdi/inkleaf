@@ -1,11 +1,17 @@
 import '../main';
 import './tools.css';
-import { DEMO_MOTIONS, MAGNIFIER_SWEEP, magnifierAt, type DemoMotionId } from '../demo/motion';
+import { BOOK_MOTIONS } from '../demo/book-motion';
+import { DEMO_MOTIONS, MAGNIFIER_SWEEP, magnifierAt, magnifierZoomAt, type DemoMotionId } from '../demo/motion';
+import { mountStudyTools } from '../demo/study';
+import { GUIDE_MOTIONS, mountGuidedView } from './guided-view';
 import { mountMagnifier } from './magnifier';
 import { mountPageGestures } from './navigation-input';
 import { mountMotionPanel } from './panel';
 
 const demo = window.inkleafDemo;
+const host = document.querySelector('main')!;
+const swingCanvas = document.querySelector<HTMLCanvasElement>('#figure')!;
+const extraCanvas = document.querySelector<HTMLCanvasElement>('#extra-figure')!;
 const addMagnifier = (
   canvasId: string,
   controls: string,
@@ -26,22 +32,41 @@ const magnifier = addMagnifier('#figure', '.controls', () => ({
 const extraMagnifier = addMagnifier('#extra-figure', '.extra-controls', () => demo.experimentTerm());
 mountPageGestures(document.querySelector('#notebook')!, (direction) => demo.movePage(direction));
 
-const clips = { ...DEMO_MOTIONS, magnifier: MAGNIFIER_SWEEP };
-const panel = mountMotionPanel<DemoMotionId | 'magnifier' | 'experiment'>(document.querySelector('main')!, clips, (id, seconds) => {
+const activeCanvas = () => demo.experimentClip() ? extraCanvas : swingCanvas;
+const views = mountGuidedView(host, { canvas: activeCanvas, demo });
+const clips = { ...DEMO_MOTIONS, ...BOOK_MOTIONS, ...GUIDE_MOTIONS, magnifier: MAGNIFIER_SWEEP };
+const panel = mountMotionPanel<DemoMotionId | keyof typeof BOOK_MOTIONS | keyof typeof GUIDE_MOTIONS | 'magnifier' | 'experiment'>(host, clips, (id, seconds) => {
+  if (id === 'camera' || id === 'riffle') {
+    magnifier?.stop();
+    extraMagnifier?.stop();
+    demo.seekBookMotion(id, seconds);
+    return;
+  }
+  if (id === 'guided' || id === 'orbit') {
+    if (id === 'orbit' && activeCanvas().hidden) {
+      if (demo.experimentClip()) demo.seekExperiment(0);
+      else demo.seek('popup', DEMO_MOTIONS.popup.lastFrame / DEMO_MOTIONS.popup.fps);
+    }
+    views.seek(id, seconds);
+    return;
+  }
   if (id === 'experiment') {
     demo.seekExperiment(seconds);
     return;
   }
   if (id === 'magnifier') {
-    const point = magnifierAt(seconds * MAGNIFIER_SWEEP.fps);
+    const frame = seconds * MAGNIFIER_SWEEP.fps;
+    const point = magnifierAt(frame);
+    const optics = { zoom: magnifierZoomAt(frame) };
     const experiment = demo.experimentClip();
     if (experiment) {
-      demo.seekExperiment(0);
-      extraMagnifier?.inspect(point);
+      // Hold a raised apparatus pose while the optical track moves.
+      demo.seekExperiment(Math.min(0.7, experiment.lastFrame / experiment.fps));
+      extraMagnifier?.inspect(point, optics);
     } else {
       const popup = DEMO_MOTIONS.popup;
       demo.seek('popup', popup.lastFrame / popup.fps);
-      magnifier?.inspect(point);
+      magnifier?.inspect(point, optics);
     }
   } else {
     magnifier?.stop();
@@ -61,3 +86,12 @@ document.addEventListener('inkleaf:lessonchange', () => {
   panel.setClip('experiment', demo.experimentClip());
 });
 panel.setClip('experiment', demo.experimentClip());
+mountStudyTools(host);
+
+const printedTerm = document.querySelector<HTMLElement>('#term-label')!;
+printedTerm.tabIndex = 0;
+const inspectTerm = () => {
+  if (!extraCanvas.hidden && demo.experimentTerm()) extraMagnifier?.inspect({ x: 0.5, y: 0.5 });
+};
+printedTerm.addEventListener('pointerenter', inspectTerm);
+printedTerm.addEventListener('focus', inspectTerm);

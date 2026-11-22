@@ -8,13 +8,17 @@ import {
   Mesh,
   MeshStandardMaterial,
   OrthographicCamera,
+  Raycaster,
   Scene,
   SphereGeometry,
   TorusGeometry,
+  Vector2,
   WebGLRenderer,
 } from "three";
 import type { Registry } from "../engine/core/registry";
 import type { LessonKind, LessonPose } from "./lesson-contract";
+import { mountFigureView } from "../motion/guided-view";
+import { createPlateFinish } from "./plate-finish";
 
 /** Seven miniature apparatuses, each driven directly by its lesson's measured pose. */
 export function mountLessonFigure(
@@ -22,7 +26,7 @@ export function mountLessonFigure(
   kind: LessonKind,
   registry: Registry
 ):
-  | { setPose(lift: number, pose: LessonPose): void; dispose(): void }
+  | { setPose(lift: number, pose: LessonPose): void; pickAction(clientX: number, clientY: number): { setting?: number } | undefined; dispose(): void }
   | undefined {
   let renderer: WebGLRenderer;
   try {
@@ -32,6 +36,7 @@ export function mountLessonFigure(
   }
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   const scene = new Scene();
+  const finish = createPlateFinish(registry, `demo.lesson.${kind}.figure`, () => canvas.dispatchEvent(new Event('inkleaf:request-frame')));
   scene.background = new Color("#eee2c8");
   const camera = new OrthographicCamera(-180, 180, 125, -125, 1, 1000);
   camera.position.set(235, 205, 320);
@@ -40,6 +45,7 @@ export function mountLessonFigure(
   const sun = new DirectionalLight("#ffffff", 2.1);
   sun.position.set(-100, 240, 180);
   scene.add(sun);
+  finish.light(sun);
   const mat = (color: string, emissive = "#000000") =>
     new MeshStandardMaterial({ color, emissive, roughness: 0.78 });
   const ink = mat("#48372f"),
@@ -50,8 +56,13 @@ export function mountLessonFigure(
     red = mat("#bf634e"),
     pale = mat("#f6e9c9"),
     glow = mat("#f4cf6b", "#7e5815");
+  finish.paper(paper);
+  finish.paper(pale);
   const root = new Group();
   scene.add(root);
+  const actions = new Map<Mesh, { setting?: number }>();
+  const ray = new Raycaster();
+  const coordinate = new Vector2();
   const box = (
     g: Group,
     m: MeshStandardMaterial,
@@ -65,6 +76,8 @@ export function mountLessonFigure(
     const o = new Mesh(new BoxGeometry(w, h, d), m);
     o.position.set(x, y, z);
     g.add(o);
+    finish.outline(o);
+    actions.set(o, {});
     return o;
   };
   const ball = (
@@ -78,6 +91,7 @@ export function mountLessonFigure(
     const o = new Mesh(new SphereGeometry(radius, 20, 12), m);
     o.position.set(x, y, z);
     g.add(o);
+    actions.set(o, {});
     return o;
   };
   const cylinder = (
@@ -92,6 +106,8 @@ export function mountLessonFigure(
     const o = new Mesh(new CylinderGeometry(radius, radius, h, 20), m);
     o.position.set(x, y, z);
     g.add(o);
+    finish.outline(o);
+    actions.set(o, {});
     return o;
   };
   const bar = (
@@ -120,14 +136,15 @@ export function mountLessonFigure(
     );
     return o;
   };
-  box(root, paper, 310, 8, 150, 0, -5, 0);
+  const pageBase = box(root, paper, 310, 8, 150, 0, -5, 0);
+  actions.delete(pageBase);
   let update: (p: LessonPose) => void = () => {};
   if (kind === "stores") {
     const jars: Mesh[] = [];
     for (let i = 0; i < 8; i++) {
       const x = ((i % 4) - 1.5) * 67,
         z = i < 4 ? -34 : 34;
-      cylinder(root, ink, 20, 4, x, 3, z);
+      const foot = cylinder(root, ink, 20, 4, x, 3, z);
       const jar = cylinder(
         root,
         [wood, teal, gold, red][i % 4]!,
@@ -138,10 +155,12 @@ export function mountLessonFigure(
         z
       );
       jars.push(jar);
-      cylinder(root, pale, 17, 4, x, 47, z);
-      ball(root, pale, 4, x, 52, z);
+      const lid = cylinder(root, pale, 17, 4, x, 47, z);
+      const knob = ball(root, pale, 4, x, 52, z);
+      for (const part of [foot, jar, lid, knob]) actions.set(part, { setting: i });
     }
     const trail = ball(root, glow, 6, 0, 62, 0);
+    actions.delete(trail);
     update = (p) => {
       const selected = Math.max(0, Math.min(7, Math.round(p.primary * 7)));
       jars.forEach((j, i) => {
@@ -208,13 +227,18 @@ export function mountLessonFigure(
     const weights: Mesh[] = [];
     const cords: Mesh[] = [];
     for (const x of [-70, 70]) {
-      box(root, ink, 10, 130, 12, x, 70);
-      box(root, wood, 72, 8, 14, x, 132);
-      cylinder(root, gold, 10, 14, x + 20, 132, 0).rotation.x = Math.PI / 2;
-      cords.push(box(root, ink, 3, 75, 3, x + 20, 90));
-      weights.push(box(root, teal, 33, 27, 23, x + 20, 40));
+      const upright = box(root, ink, 10, 130, 12, x, 70);
+      const crossbar = box(root, wood, 72, 8, 14, x, 132);
+      const winch = cylinder(root, gold, 10, 14, x + 20, 132, 0);
+      winch.rotation.x = Math.PI / 2;
+      const cord = box(root, ink, 3, 75, 3, x + 20, 90);
+      const weight = box(root, teal, 33, 27, 23, x + 20, 40);
+      cords.push(cord);
+      weights.push(weight);
+      for (const part of [upright, crossbar, winch, cord, weight]) actions.set(part, { setting: x < 0 ? 0 : 1 });
     }
     const pointer = ball(root, red, 7, -70, 147);
+    actions.delete(pointer);
     update = (p) => {
       [p.primary, p.secondary].forEach((v, i) => {
         weights[i]!.position.y = 35 + 75 * v;
@@ -295,10 +319,11 @@ export function mountLessonFigure(
       lastHeight = h;
       lastDpr = dpr;
       const aspect = w / h;
-      camera.left = -125 * aspect;
-      camera.right = 125 * aspect;
-      camera.top = 125;
-      camera.bottom = -125;
+      const halfHeight = Math.max(125, 180 / aspect);
+      camera.left = -halfHeight * aspect;
+      camera.right = halfHeight * aspect;
+      camera.top = halfHeight;
+      camera.bottom = -halfHeight;
       camera.updateProjectionMatrix();
     }
     renderer.render(scene, camera);
@@ -306,12 +331,27 @@ export function mountLessonFigure(
       canvas.dispatchEvent(new Event("inkleaf:frame"));
   };
   let disposed = false;
+  const view = mountFigureView(canvas, camera, render);
   const observer = new ResizeObserver(render);
   observer.observe(canvas);
   canvas.addEventListener("inkleaf:request-frame", render);
   canvas.hidden = false;
   render();
   return {
+    pickAction(clientX, clientY) {
+      if (disposed || canvas.hidden || canvas.dataset.loupeActive === 'true' || !Number.isFinite(clientX) || !Number.isFinite(clientY)) return;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0 || clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return;
+      coordinate.set((clientX - rect.left) / rect.width * 2 - 1, 1 - (clientY - rect.top) / rect.height * 2);
+      scene.updateMatrixWorld(true);
+      camera.updateMatrixWorld();
+      ray.setFromCamera(coordinate, camera);
+      // Explicit mesh list excludes paper ground, ink strokes and decorative cues.
+      const hit = ray.intersectObjects([...actions.keys()].filter(object => object.visible), false)[0];
+      if (!hit) return;
+      const action = actions.get(hit.object as Mesh);
+      return action ? { ...action } : undefined;
+    },
     setPose(lift, pose) {
       root.rotation.x = (-(1 - Math.max(0, Math.min(1, lift))) * Math.PI) / 2;
       update(pose);
@@ -320,6 +360,8 @@ export function mountLessonFigure(
     dispose() {
       disposed = true;
       observer.disconnect();
+      view.dispose();
+      finish.dispose();
       canvas.removeEventListener("inkleaf:request-frame", render);
       registry.remove(id);
       scene.traverse((o) => {
