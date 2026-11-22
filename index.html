@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>inkleaf · a pop-up physics notebook in three.js</title>
+<meta name="description" content="An interactive 3D pop-up book built with inkleaf: diagrams printed on the page peel up into hand-inked models and energy flows as glowing light." />
+<meta name="theme-color" content="#14121a" />
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #b9b0a2; }
+  canvas#c { display: block; width: 100%; height: 100%; touch-action: none; outline: none; }
+</style>
+</head>
+<body>
+<canvas id="c" tabindex="0" aria-label="An open book on a desk. Use the arrow keys to turn pages, or read the text version."></canvas>
+<div id="ui"></div>
+<main id="a11y" class="sr" aria-label="Text version of the book"></main>
+<div id="a11yLive" class="sr" aria-live="polite" aria-atomic="true"></div>
+<script type="module" src="./src/main.ts"></script>
+</body>
+</html>
