@@ -1,4 +1,8 @@
-export function mountMagnifier(canvas: HTMLCanvasElement, button: HTMLButtonElement) {
+export function mountMagnifier(
+  canvas: HTMLCanvasElement,
+  button: HTMLButtonElement,
+  term: () => { label: string; definition: string } | null = () => null,
+) {
   const plate = canvas.parentElement;
   if (!plate) return;
   const detail = document.createElement('canvas');
@@ -13,10 +17,16 @@ export function mountMagnifier(canvas: HTMLCanvasElement, button: HTMLButtonElem
   help.className = 'inkleaf-loupe-help';
   help.hidden = true;
   help.textContent = '2× detail. Move or tap the diagram to inspect a point. With the magnifier button focused, use the arrow keys to move it and Escape to close it.';
-  help.id = 'inkleaf-loupe-help';
+  help.id = canvas.id + '-loupe-help';
+  const card = document.createElement('aside');
+  card.className = 'inkleaf-loupe-term';
+  card.hidden = true;
+  const termLabel = document.createElement('strong');
+  const definition = document.createElement('p');
+  card.append(termLabel, definition);
   button.setAttribute('aria-describedby', help.id);
   plate.append(detail);
-  plate.after(help);
+  plate.after(help, card);
 
   const zoom = 2;
   let active = false;
@@ -26,13 +36,22 @@ export function mountMagnifier(canvas: HTMLCanvasElement, button: HTMLButtonElem
   const minOffset = (value: number) => Math.min(0.95, Math.max(0.05, value));
 
   function setActive(value: boolean): void {
+    if (active === value) return;
     active = value;
     canvas.dataset.loupeActive = String(active);
     button.setAttribute('aria-pressed', String(active));
     detail.hidden = !active;
-    if (active) canvas.dispatchEvent(new Event('inkleaf:request-frame'));
+    help.hidden = !active;
+    const context = active ? term() : null;
+    card.hidden = !context;
+    if (context) {
+      termLabel.textContent = context.label;
+      definition.textContent = context.definition;
+    }
+    if (active) redraw();
   }
 
+  const redraw = () => canvas.dispatchEvent(new Event('inkleaf:request-frame'));
   const syncAvailability = () => {
     const hidden = canvas.hasAttribute('hidden');
     button.hidden = hidden;
@@ -58,7 +77,7 @@ export function mountMagnifier(canvas: HTMLCanvasElement, button: HTMLButtonElem
     }
     event.preventDefault();
     event.stopPropagation();
-    if (active) canvas.dispatchEvent(new Event('inkleaf:request-frame'));
+    if (active) redraw();
   });
 
   function locate(event: PointerEvent): void {
@@ -69,11 +88,21 @@ export function mountMagnifier(canvas: HTMLCanvasElement, button: HTMLButtonElem
     y = minOffset((event.clientY - bounds.top) / bounds.height);
   }
 
-  canvas.addEventListener('pointermove', (event) => { if (event.pointerType === 'mouse') locate(event); });
+  let framePending = false;
+  canvas.addEventListener('pointermove', (event) => {
+    if (!active || event.pointerType !== 'mouse') return;
+    locate(event);
+    if (framePending) return;
+    framePending = true;
+    requestAnimationFrame(() => {
+      framePending = false;
+      if (active) redraw();
+    });
+  });
   canvas.addEventListener('pointerdown', (event) => {
     if (!active) return;
     locate(event);
-    canvas.dispatchEvent(new Event('inkleaf:request-frame'));
+    redraw();
   });
   canvas.addEventListener('inkleaf:frame', () => {
     if (!active) return;
@@ -93,7 +122,10 @@ export function mountMagnifier(canvas: HTMLCanvasElement, button: HTMLButtonElem
       x = minOffset(center.x);
       y = minOffset(center.y);
       pendingDetail = canvas.hasAttribute('hidden');
-      if (!pendingDetail) setActive(true);
+      if (!pendingDetail) {
+        if (active) redraw();
+        else setActive(true);
+      }
     },
     stop(): void {
       pendingDetail = false;

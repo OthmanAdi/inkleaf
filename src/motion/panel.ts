@@ -2,9 +2,10 @@ import { frameAt, timeAt, type MotionClip } from './frames';
 
 export function mountMotionPanel<Id extends string>(
   host: HTMLElement,
-  clips: Readonly<Record<Id, MotionClip>>,
+  clips: Readonly<Partial<Record<Id, MotionClip>>>,
   seek: (id: Id, seconds: number) => void,
-): void {
+) {
+  const catalog = new Map<Id, MotionClip>();
   const panel = document.createElement('details');
   panel.className = 'motion-panel';
   panel.innerHTML = `
@@ -24,11 +25,17 @@ export function mountMotionPanel<Id extends string>(
   const previous = panel.querySelector<HTMLButtonElement>('button[data-step="-1"]')!;
   const next = panel.querySelector<HTMLButtonElement>('button[data-step="1"]')!;
 
-  for (const id of Object.keys(clips) as Id[]) choice.add(new Option(clips[id].label, id));
+  for (const id of Object.keys(clips) as Id[]) {
+    const clip = clips[id];
+    if (!clip) continue;
+    catalog.set(id, clip);
+    choice.add(new Option(clip.label, id));
+  }
 
   function apply(frame: number, updateScene: boolean): void {
     const id = choice.value as Id;
-    const clip = clips[id];
+    const clip = catalog.get(id);
+    if (!clip) return;
     const index = frameAt(clip, frame);
     slider.max = String(clip.lastFrame);
     slider.value = String(index);
@@ -47,4 +54,23 @@ export function mountMotionPanel<Id extends string>(
   panel.addEventListener('toggle', () => { if (panel.open) apply(0, true); });
   apply(0, false);
   host.append(panel);
+
+  return {
+    setClip(id: Id, clip: MotionClip | null): void {
+      const option = Array.from(choice.options).find((item) => item.value === id);
+      const current = catalog.get(id);
+      if (!clip) {
+        const selected = choice.value === id;
+        catalog.delete(id);
+        option?.remove();
+        if (selected) apply(0, false);
+      } else if (current?.label !== clip.label || current.fps !== clip.fps || current.lastFrame !== clip.lastFrame) {
+        catalog.set(id, clip);
+        if (option) option.text = clip.label;
+        else choice.add(new Option(clip.label, id));
+        choice.value = id;
+        apply(0, false);
+      }
+    },
+  };
 }

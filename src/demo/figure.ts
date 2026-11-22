@@ -1,6 +1,6 @@
 import {
   BoxGeometry, Color, CylinderGeometry, GridHelper, Group, Mesh, MeshBasicMaterial,
-  MeshStandardMaterial, SphereGeometry,
+  MeshStandardMaterial, Plane, Raycaster, SphereGeometry, Vector2, Vector3,
 } from 'three';
 import { createEngine, supportsWebGL2 } from '../engine/core/app';
 import type { Registry } from '../engine/core/registry';
@@ -109,10 +109,33 @@ export function mountPendulumFigure(canvas: HTMLCanvasElement, registry: Registr
   engine.ctx.start();
   canvas.hidden = false;
 
+  const ray = new Raycaster();
+  const coordinate = new Vector2();
+  const plane = new Plane();
+  const origin = new Vector3();
+  const normal = new Vector3();
+  const point = new Vector3();
+
   return {
     setPose(lift: number, angle: number) {
       popup.rotation.x = -(1 - lift) * Math.PI / 2;
       arm.rotation.z = angle;
+    },
+    angleAt(clientX: number, clientY: number, requireBob: boolean): number | undefined {
+      const rect = canvas.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      coordinate.set((clientX - rect.left) / rect.width * 2 - 1, 1 - (clientY - rect.top) / rect.height * 2);
+      scene.updateMatrixWorld();
+      camera.updateMatrixWorld();
+      ray.setFromCamera(coordinate, camera);
+      if (requireBob && !ray.intersectObject(bob, false).length) return;
+
+      pivot.localToWorld(origin.set(0, 0, 0));
+      normal.set(0, 0, 1).transformDirection(pivot.matrixWorld);
+      plane.setFromNormalAndCoplanarPoint(normal, origin);
+      if (!ray.ray.intersectPlane(plane, point)) return;
+      pivot.worldToLocal(point);
+      return Math.atan2(point.x, -point.y) * 180 / Math.PI;
     },
   };
 }
