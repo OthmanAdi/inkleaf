@@ -1,21 +1,79 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>inkleaf · a pop-up physics notebook in three.js</title>
-<meta name="description" content="An interactive 3D pop-up book built with inkleaf: diagrams printed on the page peel up into hand-inked models and energy flows as glowing light." />
-<meta name="theme-color" content="#14121a" />
-<style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #b9b0a2; }
-  canvas#c { display: block; width: 100%; height: 100%; touch-action: none; outline: none; }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Where Energy Goes · Inkleaf</title>
+  <meta name="description" content="A pop-up physics field notebook. Release a pendulum and watch energy move between stores.">
+  <meta name="theme-color" content="#112e31">
 </head>
 <body>
-<canvas id="c" tabindex="0" aria-label="An open book on a desk. Use the arrow keys to turn pages, or read the text version."></canvas>
-<div id="ui"></div>
-<main id="a11y" class="sr" aria-label="Text version of the book"></main>
-<div id="a11yLive" class="sr" aria-live="polite" aria-atomic="true"></div>
-<script type="module" src="./src/main.ts"></script>
+  <header class="masthead">
+    <a class="wordmark" href="./" aria-label="Inkleaf home"><span aria-hidden="true">✧</span> Inkleaf</a>
+    <span>Physics field notebook</span>
+  </header>
+  <main>
+    <div class="notebook" id="notebook">
+      <section class="paper page-left" aria-label="Field notes">
+        <div class="cover-copy" id="cover-copy">
+          <p class="folio">Field notebook · Energy</p>
+          <h1 id="book-title" tabindex="-1"></h1>
+          <p class="lead">An experiment you can run on paper.</p>
+          <p class="opening-note">Follow a pendulum through one swing. Watch what changes as it falls, rises, and warms the air.</p>
+        </div>
+        <div class="lesson-copy" id="lesson-copy" hidden>
+          <p class="folio" id="lesson-book-title"></p>
+          <h1 id="lesson-title" tabindex="-1"></h1>
+          <p class="lead" id="lesson-description"></p>
+          <fieldset>
+            <legend id="prediction-question"></legend>
+            <div class="choices" id="prediction-options"></div>
+          </fieldset>
+          <p class="prediction-feedback" id="prediction-feedback" role="status"></p>
+          <details>
+            <summary>Why does it happen?</summary>
+            <p id="prediction-explanation"></p>
+          </details>
+        </div>
+      </section>
+      <section class="paper page-right" aria-label="Pendulum experiment">
+        <div id="experiment" hidden>
+          <div class="plate-caption"><span>Pendulum</span><span id="model-specs"></span></div>
+          <div class="plate">
+            <div class="diagram" aria-hidden="true"><div class="diagram-frame"></div><div class="diagram-rod"></div></div>
+            <canvas id="figure" aria-hidden="true" hidden></canvas>
+          </div>
+          <div class="controls">
+            <button type="button" id="lift" class="primary">Raise pop-up</button>
+            <button type="button" id="release" class="primary" hidden>Release bob</button>
+            <button type="button" id="reset" hidden>Reset</button>
+            <label class="drag"><input type="checkbox" id="drag" disabled> Air drag</label>
+          </div>
+          <dl class="readouts">
+            <div><dt>Gravitational</dt><dd><span class="bar" aria-hidden="true"><i id="bar-gravitational"></i></span><span id="gravitational"></span></dd></div>
+            <div><dt>Kinetic</dt><dd><span class="bar" aria-hidden="true"><i id="bar-kinetic"></i></span><span id="kinetic"></span></dd></div>
+            <div><dt>Thermal</dt><dd><span class="bar" aria-hidden="true"><i id="bar-thermal"></i></span><span id="thermal"></span></dd></div>
+          </dl>
+          <p class="result" id="result" role="status"></p>
+        </div>
+      </section>
+      <div class="leaf" aria-hidden="true">
+        <div class="leaf-front">
+          <div class="cover-rule">
+            <span class="folio">Experiment</span>
+            <div class="cover-diagram"><i></i><i></i><i></i></div>
+            <span class="cover-title" id="cover-title"></span>
+          </div>
+        </div>
+        <div class="leaf-back"></div>
+      </div>
+      <button type="button" class="primary open-book" id="open-book">Open notebook <span aria-hidden="true">↗</span></button>
+    </div>
+    <nav class="book-nav" aria-label="Notebook pages">
+      <button type="button" id="previous" hidden>← Back to cover</button>
+      <button type="button" id="inspector" aria-expanded="false">Inspect elements</button>
+    </nav>
+  </main>
+  <script type="module" src="./src/motion/setup.ts"></script>
 </body>
 </html>
