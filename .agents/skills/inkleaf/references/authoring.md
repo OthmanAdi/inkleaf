@@ -1,43 +1,53 @@
-# Author a spread and its animations
+# Author lessons, scenes and motion
 
-## Change a swing lesson
+## Choose the lesson model
 
-Use `src/demo/lesson.ts` as the editable example. Choose a new stable `id`, a short book title and lesson title, a description and a prediction with three choices. Set `correct` to the zero-based index. Explain the prediction in one paragraph.
+The lesson contract is in `src/demo/lesson-contract.ts`. It declares seven `LessonKind` values: `stores`, `catapult`, `bounce`, `heating`, `lifting`, `lamps` and `grid`. The reader connects one lesson for each kind, plus the separate swing lesson, for eight experiments. Lesson samples are in `src/demo/lessons/index.ts`; their Three.js figure dispatch is in `src/demo/lesson-figures.ts`.
 
-The swing settings use kilograms, metres and degrees. The physical model in `src/engine/physics/pendulum.ts` uses radians internally. If the model settings change, recalculate the worked numbers in the text. The initial height above the bottom is `L × (1 − cos(angle))` and the initial gravitational energy is `mass × g × height`. Describe what air drag changes. A different concept may need a different figure and simulation module.
+Read the active lesson registry and figure dispatch before editing a chapter. `LessonKind` is a closed union, and `InteractiveLesson` has no figure callback. Add a kind and its scene dispatch, or give a separate lesson its own rendering path. Preserve the lesson's scientific or mathematical assumptions in its settings, sample function and explanation.
 
-Edit the theme and paper composition in `src/demo/style.css`. Keep text visible and controls operable when the renderer falls back to the HTML/CSS figure.
+Every `InteractiveLesson` supplies:
 
-## Expose a motion by ID
+| Field | Authoring guidance |
+|---|---|
+| `id` | Stable, unique identifier used by navigation and saved state. |
+| `kind` | One declared model kind. Add a kind only when a new model contract is needed. |
+| `title`, `description` | A short title and the idea the reader should take away. |
+| `prediction` | A question, at least two options, the zero-based correct index, and an evidence-based explanation. |
+| `term` | One concise term and definition. The definition can be offered as an optional magnified detail. |
+| `settings` | A label and reader-visible options. Map each option index to an explicit model input. |
+| `action` | The verb the reader uses to run the experiment. |
+| `duration` | Experiment duration in seconds. Keep clip timing derived from this value. |
+| `sample(seconds, setting)` | A pure, repeatable sample containing `pose`, `readings` and `note`. |
 
-Use a short stable clip ID. Declare its label, frame rate and last frame in `src/demo/motion.ts`. Frame zero is the initial pose. For a 0.9 s motion at 60 fps, the last frame is 54. Change the motion duration in one place and use that value for both playback and seeking.
+`LessonPose` has three normalized channels: `primary`, `secondary` and `highlight`. They are not universal physical quantities. Document and implement how the selected lesson's scene maps each channel to its own geometry, materials or annotations. `LessonSample.readings` and `note` should agree with that pose and the selected setting.
 
-An authored track is an ordered list of frame/value pairs. The outgoing keyframe chooses its easing.
+## Make a custom scene
 
-```ts
-import { sampleTrack, type Keyframe } from '../motion/frames';
+When a lesson needs a different renderer, create a scene module for its diagram. Keep lesson-specific coordinates, materials and object relationships there. Let the lesson sampler describe the model state; let the scene renderer turn that state into a drawing. Keep page layout, shared controls and lesson prose outside the scene.
 
-const hinge: readonly [Keyframe, Keyframe, Keyframe] = [
-  { frame: 0, value: 0, easeToNext: 'inQuad' },
-  { frame: 12, value: 20, easeToNext: 'outCubic' },
-  { frame: 48, value: 90 },
-];
+Give each interactive object a meaningful ID and label. Register controls and values that a later author may need to inspect or tune. Include units, ranges and help text for numerical controls. Keep key values and the diagram's purpose readable in HTML so the lesson remains clear if canvas rendering fails.
 
-const hingeAngle = (frame: number) => sampleTrack(hinge, frame);
-```
+For a physical process, derive `sample` from explicit input parameters and a known initial state. If numerical integration is needed, use a fixed integration step and derive display values from the same simulated state. Compute time from explicit inputs. Wall-clock frame deltas, previous render calls and hidden user input make seeking and repeated samples disagree.
 
-For another figure, map sampled values onto its own transforms. Give each track one responsibility, such as angle, elevation, opacity, light intensity or a material parameter. Keep coordinates and materials in scene code. All keyframe frame numbers must be finite and strictly increasing.
+## Author motion and seeking
 
-Give the frame panel the clip metadata and a function that applies the selected state. A seek must stop ongoing playback for the clip, establish any prerequisite state, and compute the pose from the requested time. If a clip depends on prior input, record the input and replay it from a known initial state in fixed steps. For a new drag gesture, specify pointer start, move, release, cancellation and the keyboard equivalent separately from the motion's visual treatment.
+Use `src/demo/motion.ts` and `src/motion/frames.ts` for the small demo tracks. A `MotionClip` has a label, frames per second and last frame. Frame zero is the initial state; duration is `lastFrame / fps`. Use `sampleTrack` with strictly increasing keyframe numbers and choose easing on the outgoing keyframe.
 
-## Reuse the optical detail
+For new work, give each clip a stable ID and one responsibility. Keep its metadata and pose function together or reference the same metadata from both playback and seeking. Clamp seeks into the clip's closed frame range. A clip should be computable at any frame without visiting prior frames.
 
-The magnifier in `src/motion/magnifier.ts` crops the current figure canvas after it renders. Use its point input in normalized canvas coordinates. The crop zoom lives in that module and the viewport treatment lives in `src/motion/tools.css`. The sample sweep in `src/demo/motion.ts` defines an independent X and Y track. `src/motion/setup.ts` binds the sweep to the visible lens. On a new renderer, provide a frame notification directly after drawing, while the WebGL drawing buffer is still available. Protect the readable HTML and controls if the canvas falls back.
+An experiment may have stateful physics. Its seek path should stop live playback, reset the model, apply the selected setting and replay from time zero in fixed steps. A pure sample function can instead compute its state directly from elapsed time and the selected setting. In either case, pose, readings, labels and term target must all match the requested time. The mounted reader exposes `window.inkleafDemo.experimentClip()`, `seekExperiment(seconds)`, `experimentTerm()` and `movePage(-1 | 1)`. The visible motion panel updates the experiment clip when the reader changes chapters. The separate `window.inkleafDemo.seek(id, seconds)` hook samples the swing's page-turn, pop-up and pendulum clips. These APIs belong to this demo; build an appropriate bridge around a new book's own state.
 
-## Check an adaptation
+Verify each clip at its first, middle and last frame, then revisit the middle frame after the last. Also test a different setting and the normal reader controls with seeking closed. If gesture input affects the simulation, record the gesture or its resulting model input as part of replay.
 
-1. Copy or branch the example. Change the content and a visual choice.
-2. Use the running frame panel to compare initial, middle and final frames.
-3. Try returning from the last frame to the middle. Confirm that it matches the first time through.
-4. Try the actual launch, movement and reset controls with no frame panel open.
-5. Record what is verified, including the environment and any untested motion families.
+## Add magnified detail when useful
+
+The **Magnifier** button in this reader shows a 2× crop of the current rendered figure. Pointer movement or a tap selects the point; when the button has focus, the arrow keys move the lens and Escape closes it. The optional lens can show a larger crop of a user's figure. Choose a normalized point, update the crop after the renderer draws, and verify the canvas is still available when the crop is read. Do not rely on magnification alone to convey a value or definition.
+
+When a lesson term is relevant to the chosen point, expose its label and definition through the lesson term data and a readable detail panel. The detail can accompany the lens or appear on its own. Make the affordance keyboard-operable, keep focus visible and provide a direct way to close it. Omit term detail when the point has no useful term.
+
+## Keep the reader flow coherent
+
+The demo's Contents page links all eight experiments. Previous/next controls and left/right arrow keys navigate the book. A touch swipe on the paper or Shift+wheel can turn pages without intercepting gestures on controls. Use these as examples from this app; add navigation deliberately to a custom scene. Persist only state that should survive a reload, and validate saved values when the lesson schema changes. The swing buttons belong to that lesson. Define the action sequence for each new lesson.
+
+In this checkout, `src/demo/lesson.ts`, `src/demo/motion.ts` and the pendulum figure module belong to the swing lesson. The seven `InteractiveLesson` models share the lesson contract and have a separate figure dispatch. The broader runtime and engine modules can provide reusable building blocks, but verify that a requested interaction is wired into the app before describing it as available.

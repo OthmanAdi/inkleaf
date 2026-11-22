@@ -1,41 +1,48 @@
 ---
 name: inkleaf
-description: Build, extend, or restyle an interactive Three.js pop-up field book with independently reusable page, reveal, simulation, and magnifier effects. Use when a user wants a physical book interface, diagrams that unfold from a page, frame-by-frame animation controls, or an original interactive lesson.
+description: Build or adapt an interactive pop-up book with original lessons, custom scenes, deterministic motion, and optional magnified term details.
 ---
 
 # Inkleaf
 
-Build a real spread with original content and artwork. Keep motion, appearance, controls and lesson data independent so an agent can change one without rebuilding the others.
+Use this skill when a reader should inspect, predict, or change something in an illustrated book. Give the lesson a clear question, a scene that responds to the reader, and observations that explain what changed.
 
-## Start from a checkout
+## Start from the project
 
-Use the checkout that contains this skill when available. In a copied skill, use the source checkout the user supplies. Confirm its `package.json` is named `inkleaf` and it contains `src/demo/lesson.ts`, `src/demo/motion.ts` and `src/motion/frames.ts`. Record the source commit and read local repository instructions.
+Use the checkout containing this skill, or the source checkout the user names. Read its project instructions and package scripts. Trace each requested feature from the lesson contract and scene modules to the active app entry point before documenting it.
 
-This checkout demonstrates a cover, one pendulum lesson, separate frame controls and a magnified detail of the diagram. The engine also contains reusable prototypes for other simulations and effects. Check the normal entry point and the relevant module before describing any additional feature as shipped.
+The checked-in reader has eight experiments: a pendulum lesson plus seven lessons described by `InteractiveLesson`. Contents navigation selects a chapter, and each extra experiment has its own settings, sample function, readings and figure. The swing lesson raises a paper apparatus, releases a pendulum, shows energy readings, supports an air-drag comparison and reset, and lazily loads a Three.js figure with an HTML/CSS fallback. A frame panel seeks the current experiment and the page, pop-up and magnifier animations. The magnifier has a term card when the selected lesson provides a term. Keyboard, touch and reduced-motion behavior are part of this demo; use the actual reader to check their details.
 
-## Choose the smallest applicable workflow
+## Choose a chapter or make a scene
 
-| Request | Start here |
-| --- | --- |
-| Change a lesson with the same mechanism | [Author a spread](references/authoring.md), `src/demo/lesson.ts` |
-| Make a motion slower, adjust the pose, or rebuild it as a variant | [Author a spread](references/authoring.md), `src/demo/motion.ts` and `src/motion/frames.ts` |
-| Invent a new interactive figure | [Three.js reference index](references/threejs/README.md), then the relevant engine and demo source |
-| Change a light, object or control by name | [Registry and tags](references/registry-and-tags.md) and the live inspector |
+The lesson contract has seven model kinds: `stores`, `catapult`, `bounce`, `heating`, `lifting`, `lamps` and `grid`. With the existing swing, these make the reader's eight experiments. Treat the names as model labels; choose an illustration and interaction that fit the lesson.
 
-## Build an original book
+For a chapter already connected to the app, author its lesson data and reuse its renderer only when the physical or visual model fits. For a new idea, build a user-specific scene and interaction. `LessonKind` is a closed union, and the contract has no pluggable figure callback. To add a scene to this reader, extend the kind and scene dispatch deliberately, or add a separate renderer when the lesson should remain independent. Map normalized `pose.primary`, `pose.secondary` and `pose.highlight` to the scene's own objects. Give each model a figure suited to its subject. Readings and the note should come from the same sample as the pose so the prose and drawing describe one state.
 
-1. Write the learning objective and one action the reader can perform. Decide what changes on the scene and what evidence the reader sees.
-2. Keep visible prose, simulation settings and visual theme in replaceable data or styles. Reuse the frame sampler and existing engine primitives for their actual contracts. Use a stable ID, human label and tags for each new controllable entity.
-3. Define each animation separately in frames. Model its starting value, keyframes, ending value, easing and trigger. Use the same pose function for playback and the frame editor. Use fixed-step replay from explicit inputs for physical or gesture-driven motion.
-4. Keep the magnifier tied to live rendered pixels. Give pointer, touch and keyboard users a way to pick the detail. Keep measurements and explanations in readable HTML.
-5. Run `npm ci` on a fresh checkout, then `npm run check` and `npm run dev`. Open the actual app and run the checks below.
+Use the [authoring guide](references/authoring.md) for lesson data, scene mapping, deterministic seeking and optional term inspection. Use the [Three.js reference index](references/threejs/README.md) when the scene needs a new rendering technique. Use [registry and tags](references/registry-and-tags.md) to make authored entities findable and tunable.
 
-## Verify it
+## Author the learning interaction
 
-- Open and close the book and make the diagram unfold. Release the simulation with its controls and confirm the visible state and readouts change. Verify reset.
-- For each new clip, seek to frame zero, a middle frame, the final frame and the same middle frame again. The repeated pose should agree. Check all visible outputs that the clip owns.
-- Verify the reader can complete the interaction on a narrow touchscreen viewport and with the keyboard. In reduced-motion mode, keep direct controls and skip decorative movement.
-- Verify the magnifier shows an enlarged crop of the live scene and still works with keyboard controls.
-- For a reusable system, ask another agent to make a second lesson using only this skill and the checkout. Record the actual steps and results. A successful build alone only proves the files compile.
+1. Write the learning objective, a short explanation, one prediction question and its answer choices. Set the correct answer by zero-based index and explain the evidence the reader should observe.
+2. Define a small set of named settings with units or clear option labels. Make each setting change a meaningful model input. Keep the model's assumptions visible in the lesson text.
+3. Implement `sample(seconds, setting)` as a repeatable mapping from explicit inputs to a scene pose, readings and note. Clamp or validate inputs at the boundary. Keep prior animation frames and pointer history out of the sample.
+4. Build the diagram for the lesson's subject. Keep labels, explanations, controls and readouts in accessible HTML where possible; use the canvas or Three.js scene for the visual model.
+5. Add a lesson-specific action and reset path. Make pointer, touch and keyboard behavior explicit. Respect reduced-motion settings while keeping the underlying interaction usable.
+6. Add optional magnified details only when they help answer the lesson question. A lens can enlarge the rendered scene; a term detail can show the selected term's definition. Keep either feature optional and provide a keyboard path and readable text equivalent.
 
-Keep requirements for unimplemented interactions explicit. A robust scene can be inspired by familiar interaction patterns while using its own composition, typography, materials and artwork.
+## Keep motion seekable
+
+Use a clip's frame rate and last frame as its source of duration. Define authored tracks as ordered frame/value pairs; the outgoing keyframe selects the easing to the next value. Frame zero is the initial pose. Keep each track responsible for one value or one tightly related pose channel.
+
+For a self-contained animation, compute the pose directly from the requested frame. For an experiment that depends on prior input, reset to a known initial state and replay recorded settings in fixed steps to the requested time. Seek must stop live playback first, set prerequisite page or scene state, and update every visible output owned by that clip. Test frame zero, a middle frame, the last frame, and the same middle frame after visiting the end.
+
+The mounted demo exposes `window.inkleafDemo.seek('turn' | 'popup' | 'swing', seconds)` for the swing clips and `window.inkleafDemo.seekExperiment(seconds)`, `experimentClip()`, `experimentTerm()` and `movePage(-1 | 1)` for the selected extra experiment and page navigation. The visible motion panel uses those demo hooks to seek the current experiment, and changes its experiment clip as the reader changes chapters. These globals and IDs belong to this app; a different book should define a small bridge around its own state instead of depending on `window.inkleafDemo`.
+
+## Check the finished chapter
+
+- Run the documented type-check, unit-test and build commands from a clean dependency install.
+- Open the actual app and follow the reader route from cover to chapter. Use the setting and action controls, read the values, reset, and repeat with another setting.
+- Seek to the start, middle and end of each authored clip, then seek back to the same middle frame. Compare the whole visible state, not only the moving object.
+- Test a narrow viewport, keyboard-only operation, swipe page turns, Shift+wheel page turns and reduced motion. Confirm the fallback scene still has readable content and working controls.
+- If the magnifier or term detail is enabled, verify the 2× crop, pointer/touch target, arrow-key movement while its button is focused, Escape close, term card and text alternative.
+- Record what was exercised and what remains unconnected. Compilation confirms the build; follow the reader flow to confirm its interactions.
